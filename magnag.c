@@ -21,12 +21,14 @@
 	#define ONE_SECOND (1000)
 	#define PRANK_INITIAL_DELAY (1) /* Bootup delay (s) */
 	#define PRANK_MIN_DELAY (0)  /* Minimum delay (s) between pranks */
-	#define PRANK_UPTIME_TRIGGER (60)
+	#define PRANK_UPTIME_TRIGGER (10)
+	#define PRANK_UPTIME_CRAZY (60)
 #else
 	#define ONE_SECOND (1000)
-	#define PRANK_INITIAL_DELAY (300) /* Bootup delay (s) */
+	#define PRANK_INITIAL_DELAY (60) /* Bootup delay (s) */
 	#define PRANK_MIN_DELAY (10)  /* Minimum delay (s) between pranks */
-	#define PRANK_UPTIME_TRIGGER (345600U) /* 4 days */
+	#define PRANK_UPTIME_TRIGGER (518400U) /* 6 days */
+	#define PRANK_UPTIME_CRAZY (864000U) /* 10 days */
 #endif
 
 uint16_t EEMEM nv_bootcount = 0;
@@ -93,22 +95,34 @@ static void do_rickroll(void)
 static void do_nonintrusive_key(void)
 {
 	DEBUG_PRINT("Non-intrusive key\n");
-	switch(random_int(5))
+	switch(random_int(11))
 	{
 	case 0:
+	case 1:
 		usb_keyboard_press(KEY_CAPS_LOCK, 0);
 		break;
-	case 1:
+	case 2:
+	case 3:
 		usb_keyboard_press(KEY_PAGE_UP, 0);
 		break;
-	case 2:
+	case 4:
+	case 5:
 		usb_keyboard_press(KEY_PAGE_DOWN, 0);
 		break;
-	case 3:
+	case 6:
 		usb_keyboard_press(KEY_DOWN, 0);
 		break;
-	case 4:
+	case 7:
 		usb_keyboard_press(KEY_LEFT, 0);
+		break;
+	case 8:
+		usb_keyboard_press(KEY_UP, 0);
+		break;
+	case 9:
+		usb_keyboard_press(KEY_RIGHT, 0);
+		break;
+	case 10:
+		usb_keyboard_press(KEY_M, KEY_LEFT_GUI);
 		break;
 	}
 }
@@ -116,13 +130,14 @@ static void do_nonintrusive_key(void)
 static void do_taunt(void)
 {
 	DEBUG_PRINT("Taunt\n");
+	usb_keyboard_press(KEY_D, KEY_LEFT_ALT);
 	usb_keyboard_putstr(TAUNT_STRING);
 }
 
 static void do_prank(uint16_t bootcount, uint32_t uptime)
 {
-	if (bootcount > 20) {
-		/* 21..inf boots: rickrolls + high rate keystrokes + taunts */
+	if (bootcount > 10 || uptime >= PRANK_UPTIME_CRAZY) {
+		/* 11..inf boots: rickrolls + high rate keystrokes + taunts */
 		switch(random_int(10))
 		{
 			case 0:
@@ -145,19 +160,23 @@ static void do_prank(uint16_t bootcount, uint32_t uptime)
 				long_delay(random_int(MINS_TO_SECS(2)));
 				break;
 		}
-	} else if (bootcount >= 10) {
-		/* 10..20 boots: Send keystroke once every 1 .. 1+rand(20-bootcount) mins */
-		do_nonintrusive_key();
-		long_delay(MINS_TO_SECS(1) + random_int(MINS_TO_SECS(20 - bootcount)));
-	} else if (uptime >= PRANK_UPTIME_TRIGGER)
-	{
+	} else if (uptime >= PRANK_UPTIME_TRIGGER) {
 		/* Start sending keystrokes if machine is not rebooted for a while */
+		uint32_t time_left_until_crazy = PRANK_UPTIME_CRAZY - uptime;
+		uint32_t sane_time_period = PRANK_UPTIME_CRAZY - PRANK_UPTIME_TRIGGER;
+		float sanity_left = (time_left_until_crazy / (float) (sane_time_period));
+		uint16_t max_delay = (uint16_t) (MINS_TO_SECS(5) * sanity_left);
+		DEBUG_PRINT("Sanity delay is 0x");
+		DEBUG_NUM(max_delay);
+		DEBUG_PRINT("\n");
 		do_nonintrusive_key();
-		long_delay(MINS_TO_SECS(1) + random_int(MINS_TO_SECS(4)));
-	}
-	else
-	{
-		/* Less than 10 boots and 4 days of uptime; do nothing! */
+		long_delay(MINS_TO_SECS(1) + random_int(max_delay));
+	} else if (bootcount >= 5) {
+		/* 5..10 boots: Send keystroke once every 1 .. 1+rand(10-bootcount) mins */
+		do_nonintrusive_key();
+		long_delay(MINS_TO_SECS(1) + random_int(MINS_TO_SECS(10 - bootcount)));
+	} else {
+		/* Less than 5 boots and a few days of uptime; do nothing! */
 		DEBUG_PRINT("NO-OP\n");
 		for (int i = 0; i < 10; i++)
 		{
